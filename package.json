@@ -1,0 +1,29 @@
+{
+  "name": "hono-test",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc & tsup",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.11.17",
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0",
+    "prettier-plugin-organize-imports": "^4.2.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.8.3"
+  },
+  "tsup": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "outDir": "dist"
+  }
+}
