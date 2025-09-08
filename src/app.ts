@@ -48,6 +48,10 @@ io.on('connection', (socket) => {
     console.log('🔊 Audio diffusé aux autres guides');
   });
 
+  socket.on('state', (xpos, ypos) => {
+    console.log('Le joueur est en position :', xpos, ypos);
+    socket.broadcast.emit('state', xpos, ypos);
+  });
   socket.on('disconnect', () => {
     const guideName = connectedGuides.get(socket.id);
     if (guideName) {
