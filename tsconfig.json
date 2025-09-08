@@ -1,17 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESnext",
-    "moduleResolution": "bundler",
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
     "strict": true,
-    "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": ["node"],
     "outDir": "./dist",
+    "rootDir": "./src",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "ts-node": {
+    "esm": false
+  }
 }

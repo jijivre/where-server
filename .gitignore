@@ -7,6 +7,7 @@
 .idea/workspace.xml
 .idea/usage.statistics.xml
 .idea/shelf
+.idea/
 
 # deps
 node_modules/
@@ -29,3 +30,4 @@ lerna-debug.log*
 
 # Build output
 dist/
+.idea/
