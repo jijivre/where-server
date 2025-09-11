@@ -1,5 +1,5 @@
 {
-  "name": "hono-test",
+  "name": "where-server",
   "scripts": {
     "dev": "nodemon src/app.ts",
     "build": "tsc",
