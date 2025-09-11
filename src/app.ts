@@ -3,6 +3,7 @@ import cors from 'cors'
 import { Server, Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
 import session from "express-session";
+import crypto from 'crypto';
 
 const app = express();
 const server = createServer(app);
@@ -10,6 +11,13 @@ const server = createServer(app);
 app.use(express.json());
 
 app.use(cors())
+
+const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase(); 
+
+type Player = { socketId: string; pseudo: string; isHost: boolean, roomId: string };
+
+const players = new Map<string, Player>();
+
 
 const io = new Server(server, {
   cors: {
@@ -27,33 +35,64 @@ app.use(
   })
 );
 
+function getPlayers(roomId: string) {
+  const room = io.sockets.adapter.rooms.get(roomId);
+  if (!room) return [];
 
-app.post('/auth/login', (req: Request, res: Response) => {
-  console.log('Login endpoint hit', req.body.pin);
-  if(req.body.pin === '1234') {
-    res.json("success");
-  } else {
-    res.status(401).json({ error: 'Invalid credentials' });
-  }
-});
+  return Array.from(players.values()).filter(p => p.roomId === roomId);
+  
+}
 
 
-
-const players = new Set();
 
 io.on('connection', (socket) => {
-  console.log('a user connected', players);
-  socket.emit('player:list', Array.from(players));
-  socket.on('player:create', (pseudo, ack) => {
-    if (!pseudo) return ack?.({ ok:false });
-    players.add(pseudo);
-    ack?.({ ok:true, pseudo });
-    io.emit('player:list', Array.from(players));
-    socket.on('disconnect', () => {
-      players.delete(pseudo);
-      io.emit('player:list', Array.from(players));
-    });
+
+    socket.on("room:create", (_, ack) => {
+    const roomId = genPIN();
+
+    socket.join(roomId);
+
+    console.log(`Room ${roomId} créée par ${socket.id}`);
+
+    ack({ ok: true, roomId });
   });
+
+  socket.on("room:join", ({ roomId }: { roomId: string }, ack) => {
+
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return ack?.({ ok: false, error: "PIN invalide" });
+
+    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: false, roomId });
+
+
+    socket.join(roomId);
+
+    ack?.({ ok: true, players: getPlayers(roomId) });
+  });
+
+
+  socket.on('player:create', (pseudo: string, ack?: (res:any)=>void) => {
+    const p = (pseudo || '').trim();
+    if (!p) return ack?.({ ok: false, error: 'Pseudo requis' });
+
+
+    const taken = Array.from(players.values()).some(pl => pl.pseudo === p);
+
+    if (taken) return ack?.({ ok: false, error: 'Pseudo déjà pris' });
+
+
+    players.set(socket.id, {
+      pseudo: p,
+      socketId: socket.id,
+      isHost: false,
+      roomId: players.get(socket.id)!.roomId
+    });
+
+    ack?.({ ok: true, pseudo: p });
+
+    io.to(players.get(socket.id)!.roomId).emit("room:players", getPlayers(players.get(socket.id)!.roomId));
+  });
+  
 });
 
 const PORT = 3001;
