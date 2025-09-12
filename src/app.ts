@@ -11,6 +11,7 @@ const io = new Server(server, {
     origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"],
   },
+  maxHttpBufferSize: 1e6,
 });
 
 app.use(cors());
@@ -18,8 +19,8 @@ app.use(express.json());
 
 const connectedGuides = new Map<string, string>();
 
-app.get("/", (req, res) => {
-  res.send("✅ Serveur Express + Socket.IO + WebRTC en ligne !");
+app.get("/", (_req, res) => {
+  res.send("✅ Serveur Express + Socket.IO tourne sur Render !");
 });
 
 io.on("connection", (socket) => {
@@ -31,22 +32,15 @@ io.on("connection", (socket) => {
     io.emit("guidesUpdate", Array.from(connectedGuides.values()));
   });
 
-  // Chat classique
   socket.on("message", (msg: string) => {
     console.log("📩 Message reçu:", msg);
     io.emit("message", msg);
   });
 
-  socket.on("offer", ({ to, offer }) => {
-    io.to(to).emit("offer", { from: socket.id, offer });
-  });
-
-  socket.on("answer", ({ to, answer }) => {
-    io.to(to).emit("answer", { from: socket.id, answer });
-  });
-
-  socket.on("iceCandidate", ({ to, candidate }) => {
-    io.to(to).emit("iceCandidate", { from: socket.id, candidate });
+  socket.on("audioMessage", (data: { from: string; audio: string }) => {
+    console.log(`🎤 Audio reçu de: ${data.from}`);
+    socket.broadcast.emit("audioMessage", data);
+    console.log("🔊 Audio diffusé aux autres guides");
   });
 
   socket.on("disconnect", () => {
@@ -55,6 +49,8 @@ io.on("connection", (socket) => {
       console.log(`❌ Guide déconnecté: ${guideName}`);
       connectedGuides.delete(socket.id);
       io.emit("guidesUpdate", Array.from(connectedGuides.values()));
+    } else {
+      console.log("❌ Client déconnecté", socket.id);
     }
   });
 });
