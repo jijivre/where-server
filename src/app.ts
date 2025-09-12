@@ -19,8 +19,8 @@ app.use(express.json());
 
 const connectedGuides = new Map<string, string>();
 
-app.get("/", (_req, res) => {
-  res.send("✅ Serveur Express + Socket.IO tourne sur Render !");
+app.get("/", (req, res) => {
+  res.send("✅ Serveur Express + Socket.IO + WebRTC tourne !");
 });
 
 io.on("connection", (socket) => {
@@ -32,15 +32,23 @@ io.on("connection", (socket) => {
     io.emit("guidesUpdate", Array.from(connectedGuides.values()));
   });
 
+  // Messages texte
   socket.on("message", (msg: string) => {
     console.log("📩 Message reçu:", msg);
     io.emit("message", msg);
   });
 
-  socket.on("audioMessage", (data: { from: string; audio: string }) => {
-    console.log(`🎤 Audio reçu de: ${data.from}`);
-    socket.broadcast.emit("audioMessage", data);
-    console.log("🔊 Audio diffusé aux autres guides");
+  // Signaling WebRTC
+  socket.on("webrtc-offer", (offer) => {
+    socket.broadcast.emit("webrtc-offer", offer);
+  });
+
+  socket.on("webrtc-answer", (answer) => {
+    socket.broadcast.emit("webrtc-answer", answer);
+  });
+
+  socket.on("webrtc-candidate", (candidate) => {
+    socket.broadcast.emit("webrtc-candidate", candidate);
   });
 
   socket.on("disconnect", () => {
