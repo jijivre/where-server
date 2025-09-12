@@ -1,14 +1,11 @@
-import express, { type Request, type Response } from 'express';
+import express from 'express';
 import cors from 'cors'
-import { Server, Server as SocketIOServer } from 'socket.io';
+import { Server } from 'socket.io';
 import { createServer } from 'http';
-import session from "express-session";
 import crypto from 'crypto';
 
 const app = express();
 const server = createServer(app);
-
-app.use(express.json());
 
 app.use(cors())
 
@@ -18,7 +15,6 @@ type Player = { socketId: string; pseudo: string; isHost: boolean, roomId: strin
 
 const players = new Map<string, Player>();
 
-
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:5173",
@@ -26,73 +22,62 @@ const io = new Server(server, {
   }
 });
 
-
-app.use(
-  session({
-    secret: "SecretSession",
-    resave: false,
-    saveUninitialized: false,
-  })
-);
-
 function getPlayers(roomId: string) {
   const room = io.sockets.adapter.rooms.get(roomId);
   if (!room) return [];
 
   return Array.from(players.values()).filter(p => p.roomId === roomId);
-  
 }
-
-
 
 io.on('connection', (socket) => {
 
-    socket.on("room:create", (_, ack) => {
+  socket.on("room:create", (_, ack) => {
     const roomId = genPIN();
 
     socket.join(roomId);
 
-    console.log(`Room ${roomId} créée par ${socket.id}`);
-
     ack({ ok: true, roomId });
   });
 
-  socket.on("room:join", ({ roomId }: { roomId: string }, ack) => {
 
-    const room = io.sockets.adapter.rooms.get(roomId);
-    if (!room) return ack?.({ ok: false, error: "PIN invalide" });
+socket.on("room:join", ({ roomId }: { roomId: string }, ack) => {
+  const room = io.sockets.adapter.rooms.get(roomId);
+  if (!room) return ack?.({ ok: false, error: "PIN invalide" });
 
-    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: false, roomId });
+  players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: false, roomId });
+  socket.join(roomId);
+
+  io.to(roomId).emit("room:players", getPlayers(roomId));
+
+  ack?.({ ok: true, players: getPlayers(roomId) });
+});
+
+socket.on('player:create', (pseudo: string, ack?: (res:any)=>void) => {
+  const p = (pseudo || '').trim();
+  if (!p) return ack?.({ ok: false, error: 'Pseudo requis'});
+
+  const existingPlayer = players.get(socket.id);
+  if (!existingPlayer) return ack?.({ ok: false, error: 'Room non trouvée pour ce joueur'});
+
+  const taken = getPlayers(existingPlayer.roomId)
+    .some(pl => pl.pseudo.toLowerCase() === p.toLowerCase());
+  if (taken) return ack?.({ ok: false, error: 'Pseudo déjà pris'});
+
+  players.set(socket.id, { ...existingPlayer, pseudo: p });
+  ack?.({ ok: true, pseudo: p });
+
+  io.to(existingPlayer.roomId).emit("room:players", getPlayers(existingPlayer.roomId));
+});
 
 
-    socket.join(roomId);
+socket.on('disconnect', () => {
+  const player = players.get(socket.id);
+  if (player) {
+    players.delete(socket.id);
+    io.to(player.roomId).emit("room:players", getPlayers(player.roomId));
+  }
+});
 
-    ack?.({ ok: true, players: getPlayers(roomId) });
-  });
-
-
-  socket.on('player:create', (pseudo: string, ack?: (res:any)=>void) => {
-    const p = (pseudo || '').trim();
-    if (!p) return ack?.({ ok: false, error: 'Pseudo requis' });
-
-
-    const taken = Array.from(players.values()).some(pl => pl.pseudo === p);
-
-    if (taken) return ack?.({ ok: false, error: 'Pseudo déjà pris' });
-
-
-    players.set(socket.id, {
-      pseudo: p,
-      socketId: socket.id,
-      isHost: false,
-      roomId: players.get(socket.id)!.roomId
-    });
-
-    ack?.({ ok: true, pseudo: p });
-
-    io.to(players.get(socket.id)!.roomId).emit("room:players", getPlayers(players.get(socket.id)!.roomId));
-  });
-  
 });
 
 const PORT = 3001;
