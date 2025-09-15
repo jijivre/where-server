@@ -1,72 +1,127 @@
 import express from 'express';
-import { createServer } from 'http';
+import cors from 'cors'
 import { Server } from 'socket.io';
-import cors from 'cors';
+import { createServer } from 'http';
+import crypto from 'crypto';
 
 const app = express();
 const server = createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:3000"],
-    methods: ["GET", "POST"]
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST"],
   },
-  maxHttpBufferSize: 1e6
+  maxHttpBufferSize: 1e6,
 });
 
 app.use(cors());
 app.use(express.json());
 
-const connectedGuides = new Map();
+const connectedGuides = new Map<string, string>();
 
-app.get('/', (req, res) => {
-  res.send('✅ Serveur Express + Socket.IO avec Audio tourne !');
-});
+const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase(); 
+
+type Player = { socketId: string; pseudo: string; isHost: boolean, roomId: string };
+
+const players = new Map<string, Player>();
+
+function getPlayers(roomId: string) {
+  const room = io.sockets.adapter.rooms.get(roomId);
+  if (!room) return [];
+
+  return Array.from(players.values()).filter(p => p.roomId === roomId);
+}
 
 io.on('connection', (socket) => {
-  console.log('🔗 Client connecté', socket.id);
 
-  socket.on('joinAsGuide', (guideName) => {
+  socket.on("joinAsGuide", (guideName: string) => {
     connectedGuides.set(socket.id, guideName);
     console.log(`🎤 Guide connecté: ${guideName}`);
-
-    io.emit('guidesUpdate', Array.from(connectedGuides.values()));
+    io.emit("guidesUpdate", Array.from(connectedGuides.values()));
   });
 
-  socket.on('message', (msg) => {
-    console.log('📩 Message reçu:', msg);
-    io.emit('message', msg);
+  socket.on("message", (msg: string) => {
+    console.log("📩 Message reçu:", msg);
+    io.emit("message", msg);
   });
 
-  socket.on('audioMessage', (data) => {
-    console.log(`🎤 Audio reçu de: ${data.from}`);
-
-    socket.broadcast.emit('audioMessage', data);
-
-    // TODO: Ici  pour envoyer l'audio vers Unity
-
-    console.log('🔊 Audio diffusé aux autres guides');
+  socket.on("webrtc-offer", (offer) => {
+    socket.broadcast.emit("webrtc-offer", offer);
   });
 
-  socket.on('state', (xpos, ypos) => {
-    console.log('Le joueur est en position :', xpos, ypos);
-    socket.broadcast.emit('state', xpos, ypos);
+  socket.on("webrtc-answer", (answer) => {
+    socket.broadcast.emit("webrtc-answer", answer);
   });
+
+  socket.on("webrtc-candidate", (candidate) => {
+    socket.broadcast.emit("webrtc-candidate", candidate);
+  });
+
+  socket.on("room:create", (_, ack) => {
+    const roomId = genPIN();
+
+    socket.join(roomId);
+
+    ack({ ok: true, roomId });
+  });
+
+
+  socket.on("room:join", ({ roomId }: { roomId: string }, ack) => {
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return ack?.({ ok: false, error: "PIN invalide" });
+
+    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: false, roomId });
+    socket.join(roomId);
+
+    io.to(roomId).emit("room:players", getPlayers(roomId));
+
+    ack?.({ ok: true, players: getPlayers(roomId) });
+  });
+
+  socket.on('player:create', (pseudo: string, ack?: (res:any)=>void) => {
+    const p = (pseudo || '').trim();
+    if (!p) return ack?.({ ok: false, error: 'Pseudo requis'});
+
+    const existingPlayer = players.get(socket.id);
+    if (!existingPlayer) return ack?.({ ok: false, error: 'Room non trouvée pour ce joueur'});
+
+    const taken = getPlayers(existingPlayer.roomId)
+      .some(pl => pl.pseudo.toLowerCase() === p.toLowerCase());
+    if (taken) return ack?.({ ok: false, error: 'Pseudo déjà pris'});
+
+    players.set(socket.id, { ...existingPlayer, pseudo: p });
+    ack?.({ ok: true, pseudo: p });
+
+    io.to(existingPlayer.roomId).emit("room:players", getPlayers(existingPlayer.roomId));
+  });
+
+
   socket.on('disconnect', () => {
+    const player = players.get(socket.id);
     const guideName = connectedGuides.get(socket.id);
-    if (guideName) {
-      console.log(`❌ Guide déconnecté: ${guideName}`);
-      connectedGuides.delete(socket.id);
+    if (player) {
+      players.delete(socket.id);
+      io.to(player.roomId).emit("room:players", getPlayers(player.roomId));
+    }
 
-      io.emit('guidesUpdate', Array.from(connectedGuides.values()));
+    if (guideName) {
+      connectedGuides.delete(socket.id);
+      io.emit("guidesUpdate", Array.from(connectedGuides.values()));
     } else {
-      console.log('❌ Client déconnecté', socket.id);
+      console.log("❌ Client déconnecté", socket.id);
     }
   });
+
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
+
 server.listen(PORT, () => {
   console.log(`🚀 Serveur sur http://localhost:${PORT}`);
-  console.log(`🎤 Prêt pour l'audio vocal`);
 });
+
+export { app };
+
+
+
