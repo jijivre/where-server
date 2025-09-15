@@ -19,14 +19,13 @@ app.use(cors());
 app.use(express.json());
 
 const connectedGuides = new Map<string, string>();
-const DEFAULT_ROOM_ID = "123456"; // PIN fixe de la room par défaut
+const DEFAULT_ROOM_ID = "123456";
 
 const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase();
 
 type Player = { socketId: string; pseudo: string; isHost: boolean; roomId: string };
 const players = new Map<string, Player>();
 
-// Créer un Set pour tracker les rooms existantes
 const existingRooms = new Set<string>();
 
 function getPlayers(roomId: string) {
@@ -35,13 +34,11 @@ function getPlayers(roomId: string) {
   return Array.from(players.values()).filter(p => p.roomId === roomId);
 }
 
-// Fonction pour créer la room par défaut
 function createDefaultRoom() {
   existingRooms.add(DEFAULT_ROOM_ID);
   console.log(`📌 Room par défaut créée avec le PIN : ${DEFAULT_ROOM_ID}`);
 }
 
-// Créer la room par défaut au démarrage
 createDefaultRoom();
 
 io.on('connection', (socket) => {
@@ -77,7 +74,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on("room:join", ({ roomId }: { roomId: string }, ack) => {
-    // Vérifier si la room existe dans notre tracking OU dans Socket.IO
     const room = io.sockets.adapter.rooms.get(roomId);
     const roomExists = existingRooms.has(roomId) || room;
 
@@ -121,7 +117,6 @@ io.on('connection', (socket) => {
       players.delete(socket.id);
       io.to(player.roomId).emit("room:players", getPlayers(player.roomId));
 
-      // Si la room est vide et que ce n'est pas la room par défaut, la supprimer
       const remainingPlayers = getPlayers(player.roomId);
       if (remainingPlayers.length === 0 && player.roomId !== DEFAULT_ROOM_ID) {
         existingRooms.delete(player.roomId);
