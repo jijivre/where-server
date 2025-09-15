@@ -35,21 +35,17 @@ function getPlayers(roomId: string) {
 
 io.on('connection', (socket) => {
 
-  console.log("🔗 Client connecté", socket.id);
-
   socket.on("joinAsGuide", (guideName: string) => {
     connectedGuides.set(socket.id, guideName);
     console.log(`🎤 Guide connecté: ${guideName}`);
     io.emit("guidesUpdate", Array.from(connectedGuides.values()));
   });
 
-  // Messages texte
   socket.on("message", (msg: string) => {
     console.log("📩 Message reçu:", msg);
     io.emit("message", msg);
   });
 
-  // Signaling WebRTC
   socket.on("webrtc-offer", (offer) => {
     socket.broadcast.emit("webrtc-offer", offer);
   });
@@ -110,7 +106,6 @@ io.on('connection', (socket) => {
     }
 
     if (guideName) {
-      console.log(`❌ Guide déconnecté: ${guideName}`);
       connectedGuides.delete(socket.id);
       io.emit("guidesUpdate", Array.from(connectedGuides.values()));
     } else {
