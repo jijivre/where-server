@@ -22,7 +22,7 @@ const connectedGuides = new Map<string, string>();
 
 const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase(); 
 
-type Player = { socketId: string; pseudo: string; isHost: boolean, roomId: string };
+type Player = { socketId: string; pseudo: string; isHost: boolean; roomId: string;position?: { x: number; y: number };lastPositionUpdate?: number;};
 
 const players = new Map<string, Player>();
 
@@ -94,6 +94,27 @@ io.on('connection', (socket) => {
     ack?.({ ok: true, pseudo: p });
 
     io.to(existingPlayer.roomId).emit("room:players", getPlayers(existingPlayer.roomId));
+  });
+
+  // Gestion des positions des joueurs
+  socket.on('player:position', (data: { roomId: string; pseudo: string; position: { x: number; y: number }; timestamp: number }) => {
+    const player = players.get(socket.id);
+    if (!player || player.roomId !== data.roomId) return;
+
+    // Mettre à jour la position du joueur
+    players.set(socket.id, {
+      ...player,
+      position: data.position,
+      lastPositionUpdate: data.timestamp
+    });
+
+    // Diffuser la position à tous les joueurs de la salle
+    io.to(data.roomId).emit('player:position:update', {
+      socketId: socket.id,
+      pseudo: data.pseudo,
+      position: data.position,
+      timestamp: data.timestamp
+    });
   });
 
 
