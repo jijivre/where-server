@@ -25,8 +25,12 @@ const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase();
 
 enum ObstacleType {
   Walls = "walls",
-  Boxes = "boxes",
+  Box = "box",
+  Box2 = "box2",
   Ladder = "ladder",
+  Vase = "vase",
+  Box3 = "box3",
+  Chest = "chest",
 }
 
 enum Role {
@@ -47,20 +51,31 @@ function getPlayers(roomId: string) {
 
 function assignRandomObstaclePerPlayer(roomId: string) {
   const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
-  const types = [...Object.values(ObstacleType)];
 
-  for (let i = types.length - 1; i > 0; i--) {
+  const priority: ObstacleType[] = [
+    ObstacleType.Walls,
+    ObstacleType.Box,
+    ObstacleType.Box2,
+    ObstacleType.Ladder,
+    ObstacleType.Vase,
+    ObstacleType.Box3,
+    ObstacleType.Chest,
+  ];
+
+  const available = priority.slice(0, guides.length);
+
+  for (let i = available.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [types[i], types[j]] = [types[j], types[i]];
+    [available[i], available[j]] = [available[j], available[i]];
   }
 
   guides.forEach((g, idx) => {
-    const assignedType = idx < types.length ? types[idx] : undefined;
+    const assignedType = available[idx] ?? null;
     players.set(g.socketId, { ...g, obstacleType: assignedType });
-
     io.to(g.socketId).emit("obstacle:assigned", { obstacleType: assignedType });
   });
 }
+
 
 // function createDefaultRoom() {
 //   existingRooms.add(DEFAULT_ROOM_ID);
@@ -99,7 +114,7 @@ io.on('connection', (socket) => {
     const roomId = genPIN();
     socket.join(roomId);
     existingRooms.add(roomId);
-    
+
     players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", role: Role.Unity, roomId });
 
     console.log(`🏠 Nouvelle room créée: ${roomId} par ${socket.id}`);
