@@ -21,14 +21,10 @@ app.use(express.json());
 const connectedGuides = new Map<string, string>();
 const DEFAULT_ROOM_ID = '123456';
 
-const genPIN = () => crypto.randomBytes(3).toString('hex').toUpperCase();
+const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase(); 
 
-type Player = {
-  socketId: string;
-  pseudo: string;
-  isHost: boolean;
-  roomId: string;
-};
+type Player = { socketId: string; pseudo: string; isHost: boolean; roomId: string;position?: { x: number; y: number };lastPositionUpdate?: number;};
+
 const players = new Map<string, Player>();
 
 const existingRooms = new Set<string>();
@@ -49,19 +45,19 @@ createDefaultRoom();
 io.on('connection', (socket) => {
   console.log(`🔌 Nouveau client connecté: ${socket.id}`);
 
-  socket.on('joinAsGuide', (guideName: string) => {
+  socket.on("joinAsGuide", (guideName: string) => {
     connectedGuides.set(socket.id, guideName);
     console.log(`🎤 Guide connecté: ${guideName}`);
     io.emit('guidesUpdate', Array.from(connectedGuides.values()));
   });
 
-  socket.on('message', (msg: string) => {
-    console.log('📩 Message reçu:', msg);
-    io.emit('message', msg);
+  socket.on("message", (msg: string) => {
+    console.log("📩 Message reçu:", msg);
+    io.emit("message", msg);
   });
 
-  socket.on('webrtc-offer', (offer) => {
-    socket.broadcast.emit('webrtc-offer', offer);
+  socket.on("webrtc-offer", (offer) => {
+    socket.broadcast.emit("webrtc-offer", offer);
   });
 
   socket.on('webrtc-answer', (answer) => {
@@ -132,6 +128,28 @@ io.on('connection', (socket) => {
       getPlayers(existingPlayer.roomId),
     );
   });
+
+  // Gestion des positions des joueurs
+  socket.on('player:position', (data: { roomId: string; pseudo: string; position: { x: number; y: number }; timestamp: number }) => {
+    const player = players.get(socket.id);
+    if (!player || player.roomId !== data.roomId) return;
+
+    // Mettre à jour la position du joueur
+    players.set(socket.id, {
+      ...player,
+      position: data.position,
+      lastPositionUpdate: data.timestamp
+    });
+
+    // Diffuser la position à tous les joueurs de la salle
+    io.to(data.roomId).emit('player:position:update', {
+      socketId: socket.id,
+      pseudo: data.pseudo,
+      position: data.position,
+      timestamp: data.timestamp
+    });
+  });
+
 
   socket.on('disconnect', () => {
     const player = players.get(socket.id);
