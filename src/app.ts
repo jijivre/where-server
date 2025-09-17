@@ -23,12 +23,18 @@ const connectedGuides = new Map<string, string>();
 
 const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase();
 
-type Player = {
-  socketId: string;
-  pseudo: string;
-  isHost: boolean;
-  roomId: string
-};
+enum ObstacleType {
+  Walls = "walls",
+  Boxes = "boxes",
+  Ladder = "ladder",
+}
+
+enum Role {
+  Unity = "unity",
+  Guide = "guide",
+}
+
+type Player = { socketId: string; pseudo: string; role: Role; roomId: string, obstacleType?: ObstacleType;  };
 
 const players = new Map<string, Player>();
 const existingRooms = new Set<string>();
@@ -37,6 +43,23 @@ function getPlayers(roomId: string) {
   const room = io.sockets.adapter.rooms.get(roomId);
   if (!room) return [];
   return Array.from(players.values()).filter(p => p.roomId === roomId);
+}
+
+function assignRandomObstaclePerPlayer(roomId: string) {
+  const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
+  const types = [...Object.values(ObstacleType)];
+
+  for (let i = types.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [types[i], types[j]] = [types[j], types[i]];
+  }
+
+  guides.forEach((g, idx) => {
+    const assignedType = idx < types.length ? types[idx] : undefined;
+    players.set(g.socketId, { ...g, obstacleType: assignedType });
+
+    io.to(g.socketId).emit("obstacle:assigned", { obstacleType: assignedType });
+  });
 }
 
 // function createDefaultRoom() {
@@ -76,6 +99,8 @@ io.on('connection', (socket) => {
     const roomId = genPIN();
     socket.join(roomId);
     existingRooms.add(roomId);
+    
+    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", role: Role.Unity, roomId });
 
     console.log(`🏠 Nouvelle room créée: ${roomId} par ${socket.id}`);
 
@@ -99,7 +124,7 @@ io.on('connection', (socket) => {
     players.set(socket.id, {
       socketId: socket.id,
       pseudo: "Anonyme",
-      isHost: false,
+      role: Role.Guide,
       roomId
     });
 
@@ -131,7 +156,9 @@ io.on('connection', (socket) => {
     const player = players.get(socket.id);
     if (!player) return ack?.({ ok: false, error: 'Joueur non trouvé'});
 
-    if (!player.isHost) return ack?.({ ok: false, error: 'Seul l\'hôte peut lancer la partie'});
+    if (player.role == Role.Guide) return ack?.({ ok: false, error: 'Seul le joueur Unity peut lancer la partie'});
+
+    assignRandomObstaclePerPlayer(player.roomId);
 
     io.to(player.roomId).emit("game:started");
     console.log(`🎮 Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
