@@ -19,13 +19,18 @@ app.use(cors());
 app.use(express.json());
 
 const connectedGuides = new Map<string, string>();
-// const DEFAULT_ROOM_ID = "123456";
+// const DEFAULT_ROOM_ID = '123456';
 
 const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase();
 
-type Player = { socketId: string; pseudo: string; isHost: boolean; roomId: string };
-const players = new Map<string, Player>();
+type Player = {
+  socketId: string;
+  pseudo: string;
+  isHost: boolean;
+  roomId: string
+};
 
+const players = new Map<string, Player>();
 const existingRooms = new Set<string>();
 
 function getPlayers(roomId: string) {
@@ -42,6 +47,7 @@ function getPlayers(roomId: string) {
 // createDefaultRoom();
 
 io.on('connection', (socket) => {
+  console.log(`🔌 Nouveau client connecté: ${socket.id}`);
 
   socket.on("joinAsGuide", (guideName: string) => {
     connectedGuides.set(socket.id, guideName);
@@ -69,9 +75,14 @@ io.on('connection', (socket) => {
   socket.on("room:create", (_, ack) => {
     const roomId = genPIN();
     socket.join(roomId);
-    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: true, roomId });
-    existingRooms.add(roomId); // Ajouter la room au tracking
-    ack({ ok: true, roomId });
+    existingRooms.add(roomId);
+
+    console.log(`🏠 Nouvelle room créée: ${roomId} par ${socket.id}`);
+
+    socket.emit('room:players', []);
+    socket.emit('room:create:response', { ok: true, roomId });
+
+    if (ack) ack({ ok: true, roomId });
   });
 
   socket.on("room:join", ({ roomId }: { roomId: string }, ack) => {
@@ -85,7 +96,13 @@ io.on('connection', (socket) => {
 
     console.log(`✅ Connexion à la room: ${roomId}`);
 
-    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: false, roomId });
+    players.set(socket.id, {
+      socketId: socket.id,
+      pseudo: "Anonyme",
+      isHost: false,
+      roomId
+    });
+
     socket.join(roomId);
 
     io.to(roomId).emit("room:players", getPlayers(roomId));
@@ -117,7 +134,7 @@ io.on('connection', (socket) => {
     if (!player.isHost) return ack?.({ ok: false, error: 'Seul l\'hôte peut lancer la partie'});
 
     io.to(player.roomId).emit("game:started");
-    console.log(`Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
+    console.log(`🎮 Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
     ack?.({ ok: true });
   });
 
@@ -129,16 +146,18 @@ io.on('connection', (socket) => {
       players.delete(socket.id);
       io.to(player.roomId).emit("room:players", getPlayers(player.roomId));
 
-      // const remainingPlayers = getPlayers(player.roomId);
-      // if (remainingPlayers.length === 0 && player.roomId !== DEFAULT_ROOM_ID) {
-      //   existingRooms.delete(player.roomId);
-      //   console.log(`🗑️ Room ${player.roomId} supprimée (vide)`);
-      // }
+      const remainingPlayers = getPlayers(player.roomId);
+      if (remainingPlayers.length === 0) {
+        // if (remainingPlayers.length === 0 && player.roomId !== DEFAULT_ROOM_ID) {
+        existingRooms.delete(player.roomId);
+        console.log(`🗑️ Room ${player.roomId} supprimée (vide)`);
+      }
     }
 
     if (guideName) {
       connectedGuides.delete(socket.id);
       io.emit("guidesUpdate", Array.from(connectedGuides.values()));
+      console.log(`🎤 Guide déconnecté: ${guideName}`);
     } else {
       console.log("❌ Client déconnecté", socket.id);
     }
