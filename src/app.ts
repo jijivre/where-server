@@ -97,6 +97,22 @@ app.post('/victory', (req, res) => {
   res.json({ success: true, message: 'Message de victoire diffusé' });
 });
 
+// Route pour gérer les mises à jour du timer depuis Unity
+app.post('/timer', (req, res) => {
+  const { timeLeft, minutes, seconds, isRunning } = req.body;
+
+  // Diffuser la mise à jour du timer à tous les clients connectés
+  io.emit('timer:update', {
+    timeLeft,
+    minutes,
+    seconds,
+    isRunning,
+    timestamp: Date.now()
+  });
+
+  res.json({ success: true, message: 'Timer diffusé' });
+});
+
 // function createDefaultRoom() {
 //   existingRooms.add(DEFAULT_ROOM_ID);
 //   console.log(`📌 Room par défaut créée avec le PIN : ${DEFAULT_ROOM_ID}`);
