@@ -19,14 +19,36 @@ app.use(cors());
 app.use(express.json());
 
 const connectedGuides = new Map<string, string>();
-// const DEFAULT_ROOM_ID = "123456";
+// const DEFAULT_ROOM_ID = '123456';
 
 const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase(); 
 
-type Player = { socketId: string; pseudo: string; isHost: boolean; roomId: string;position?: { x: number; y: number };lastPositionUpdate?: number;};
+enum ObstacleType {
+  Walls = "walls",
+  Box = "box",
+  Box2 = "box2",
+  Ladder = "ladder",
+  Vase = "vase",
+  Box3 = "box3",
+  Chest = "chest",
+}
+
+enum Role {
+  Unity = "unity",
+  Guide = "guide",
+}
+
+type Player = { 
+  socketId: string; 
+  pseudo: string; 
+  role: Role; 
+  roomId: string; 
+  obstacleType?: ObstacleType;
+  position?: { x: number; y: number };
+  lastPositionUpdate?: number;
+};
 
 const players = new Map<string, Player>();
-
 const existingRooms = new Set<string>();
 
 function getPlayers(roomId: string) {
@@ -34,6 +56,34 @@ function getPlayers(roomId: string) {
   if (!room) return [];
   return Array.from(players.values()).filter((p) => p.roomId === roomId);
 }
+
+function assignRandomObstaclePerPlayer(roomId: string) {
+  const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
+
+  const priority: ObstacleType[] = [
+    ObstacleType.Walls,
+    ObstacleType.Box,
+    ObstacleType.Box2,
+    ObstacleType.Ladder,
+    ObstacleType.Vase,
+    ObstacleType.Box3,
+    ObstacleType.Chest,
+  ];
+
+  const available = priority.slice(0, guides.length);
+
+  for (let i = available.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [available[i], available[j]] = [available[j], available[i]];
+  }
+
+  guides.forEach((g, idx) => {
+    const assignedType = available[idx] ?? null;
+    players.set(g.socketId, { ...g, obstacleType: assignedType });
+    io.to(g.socketId).emit("obstacle:assigned", { obstacleType: assignedType });
+  });
+}
+
 
 // function createDefaultRoom() {
 //   existingRooms.add(DEFAULT_ROOM_ID);
@@ -71,11 +121,16 @@ io.on('connection', (socket) => {
   socket.on('room:create', (_, ack) => {
     const roomId = genPIN();
     socket.join(roomId);
-    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", isHost: true, roomId });
-    existingRooms.add(roomId); // Ajouter la room au tracking
+    existingRooms.add(roomId);
+
+    players.set(socket.id, { socketId: socket.id, pseudo: "Anonyme", role: Role.Unity, roomId });
+
     console.log(`🏠 Nouvelle room créée: ${roomId} par ${socket.id}`);
 
-    ack({ ok: true, roomId });
+    socket.emit('room:players', []);
+    socket.emit('room:create:response', { ok: true, roomId });
+
+    if (ack) ack({ ok: true, roomId });
   });
 
   socket.on('room:join', ({ roomId }: { roomId: string }, ack) => {
@@ -93,10 +148,11 @@ io.on('connection', (socket) => {
 
     players.set(socket.id, {
       socketId: socket.id,
-      pseudo: 'Anonyme',
-      isHost: false,
-      roomId,
+      pseudo: "Anonyme",
+      role: Role.Guide,
+      roomId
     });
+
     socket.join(roomId);
 
     io.to(roomId).emit('room:players', getPlayers(roomId));
@@ -152,10 +208,12 @@ io.on('connection', (socket) => {
     const player = players.get(socket.id);
     if (!player) return ack?.({ ok: false, error: 'Joueur non trouvé'});
 
-    if (!player.isHost) return ack?.({ ok: false, error: 'Seul l\'hôte peut lancer la partie'});
+    if (player.role == Role.Guide) return ack?.({ ok: false, error: 'Seul le joueur Unity peut lancer la partie'});
+
+    assignRandomObstaclePerPlayer(player.roomId);
 
     io.to(player.roomId).emit("game:started");
-    console.log(`Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
+    console.log(`🎮 Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
     ack?.({ ok: true });
   });
 
@@ -167,16 +225,18 @@ io.on('connection', (socket) => {
       players.delete(socket.id);
       io.to(player.roomId).emit('room:players', getPlayers(player.roomId));
 
-      // const remainingPlayers = getPlayers(player.roomId);
-      // if (remainingPlayers.length === 0 && player.roomId !== DEFAULT_ROOM_ID) {
-      //   existingRooms.delete(player.roomId);
-      //   console.log(`🗑️ Room ${player.roomId} supprimée (vide)`);
-      // }
+      const remainingPlayers = getPlayers(player.roomId);
+      if (remainingPlayers.length === 0) {
+        // if (remainingPlayers.length === 0 && player.roomId !== DEFAULT_ROOM_ID) {
+        existingRooms.delete(player.roomId);
+        console.log(`🗑️ Room ${player.roomId} supprimée (vide)`);
+      }
     }
 
     if (guideName) {
       connectedGuides.delete(socket.id);
-      io.emit('guidesUpdate', Array.from(connectedGuides.values()));
+      io.emit("guidesUpdate", Array.from(connectedGuides.values()));
+      console.log(`🎤 Guide déconnecté: ${guideName}`);
     } else {
       console.log('❌ Client déconnecté', socket.id);
     }
