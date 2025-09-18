@@ -21,7 +21,7 @@ app.use(express.json());
 const connectedGuides = new Map<string, string>();
 // const DEFAULT_ROOM_ID = '123456';
 
-const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase(); 
+const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase();
 
 enum ObstacleType {
   Walls = "walls",
@@ -38,11 +38,11 @@ enum Role {
   Guide = "guide",
 }
 
-type Player = { 
-  socketId: string; 
-  pseudo: string; 
-  role: Role; 
-  roomId: string; 
+type Player = {
+  socketId: string;
+  pseudo: string;
+  role: Role;
+  roomId: string;
   obstacleType?: ObstacleType;
   position?: { x: number; y: number };
   lastPositionUpdate?: number;
@@ -84,6 +84,18 @@ function assignRandomObstaclePerPlayer(roomId: string) {
   });
 }
 
+// Route pour gérer la victoire depuis Unity
+app.post('/victory', (req, res) => {
+  console.log('🏆 Message de victoire reçu de Unity');
+
+  // Diffuser le message de victoire à tous les clients connectés
+  io.emit('game:victory', {
+    message: 'Vous avez gagné!',
+    timestamp: Date.now()
+  });
+
+  res.json({ success: true, message: 'Message de victoire diffusé' });
+});
 
 // function createDefaultRoom() {
 //   existingRooms.add(DEFAULT_ROOM_ID);
@@ -202,7 +214,6 @@ io.on('connection', (socket) => {
       timestamp: data.timestamp
     });
   });
-
 
   socket.on('game:launch', (_, ack?: (res: any) => void) => {
     const player = players.get(socket.id);
