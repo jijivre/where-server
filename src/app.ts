@@ -43,8 +43,8 @@ type Player = {
   pseudo: string; 
   role: Role; 
   roomId: string; 
-  obstacleType?: ObstacleType; // Pour compatibilité
-  obstacleTypes?: ObstacleType[]; // Nouveau: plusieurs obstacles
+  obstacleType?: ObstacleType; 
+  obstacleTypes?: ObstacleType[]; 
   position?: { x: number; y: number };
   lastPositionUpdate?: number;
 };
@@ -62,7 +62,6 @@ function assignRandomObstaclePerPlayer(roomId: string) {
   const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
   const guideCount = guides.length;
 
-  // Toujours utiliser TOUS les obstacles disponibles
   const allObstacles: ObstacleType[] = [
     ObstacleType.Walls,
     ObstacleType.Box,
@@ -73,40 +72,37 @@ function assignRandomObstaclePerPlayer(roomId: string) {
     ObstacleType.Chest,
   ];
 
-  // Calculer la répartition équitable de TOUS les obstacles
+  // on essyae de calculer la repartition équitable de TOUS les obstacles
   const obstaclesPerPlayer = Math.floor(allObstacles.length / guideCount);
   const remainingObstacles = allObstacles.length % guideCount;
 
   console.log(`🎯 Répartition: ${guideCount} joueurs, ${allObstacles.length} obstacles`);
   console.log(`📊 ${obstaclesPerPlayer} obstacles par joueur + ${remainingObstacles} joueurs avec 1 obstacle en plus`);
 
-  // Mélanger les obstacles
+  // on mix les obstacles
   const shuffledObstacles = [...allObstacles];
   for (let i = shuffledObstacles.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffledObstacles[i], shuffledObstacles[j]] = [shuffledObstacles[j], shuffledObstacles[i]];
   }
 
-  // Assigner les obstacles à chaque joueur
   let obstacleIndex = 0;
   guides.forEach((guide, playerIndex) => {
-    // Calculer combien d'obstacles ce joueur doit avoir
     let obstaclesForThisPlayer = obstaclesPerPlayer;
     if (playerIndex < remainingObstacles) {
-      obstaclesForThisPlayer += 1; // Ce joueur aura un obstacle en plus
+      obstaclesForThisPlayer += 1;
     }
 
-    // Assigner les obstacles à ce joueur
+    // on assigne les obstacles à ce joueur
     const assignedObstacles: ObstacleType[] = [];
     for (let i = 0; i < obstaclesForThisPlayer && obstacleIndex < shuffledObstacles.length; i++) {
       assignedObstacles.push(shuffledObstacles[obstacleIndex]);
       obstacleIndex++;
     }
 
-    // Mettre à jour le joueur avec ses obstacles
+    // on met à jour le joueur avec ses obstacles
     players.set(guide.socketId, { ...guide, obstacleTypes: assignedObstacles });
     
-    // Envoyer les obstacles assignés au joueur
     io.to(guide.socketId).emit("obstacles:assigned", { 
       obstacleTypes: assignedObstacles,
       totalObstacles: assignedObstacles.length
@@ -115,7 +111,6 @@ function assignRandomObstaclePerPlayer(roomId: string) {
     console.log(`👤 ${guide.pseudo} a reçu ${assignedObstacles.length} obstacles: ${assignedObstacles.join(', ')}`);
   });
 
-  // Vérifier que tous les obstacles ont été assignés
   const totalAssigned = guides.reduce((sum, guide) => {
     const player = players.get(guide.socketId);
     return sum + (player?.obstacleTypes?.length || 0);
@@ -124,11 +119,9 @@ function assignRandomObstaclePerPlayer(roomId: string) {
   console.log(`✅ Total obstacles assignés: ${totalAssigned}/${allObstacles.length}`);
 }
 
-// Fonction pour réassigner automatiquement les obstacles
 function reassignObstaclesAutomatically(roomId: string) {
   const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
   
-  // Ne réassigner que s'il y a au moins 1 joueur guide
   if (guides.length === 0) {
     console.log(`[${roomId}] Aucun guide, pas de réassignation d'obstacles`);
     return;
@@ -212,7 +205,6 @@ io.on('connection', (socket) => {
     const roomPlayers = getPlayers(roomId);
     io.to(roomId).emit('room:players', roomPlayers);
 
-    // Réassigner automatiquement les obstacles quand un joueur rejoint
     reassignObstaclesAutomatically(roomId);
 
     ack?.({ ok: true, players: roomPlayers });
@@ -268,7 +260,6 @@ io.on('connection', (socket) => {
 
     if (player.role == Role.Guide) return ack?.({ ok: false, error: 'Seul le joueur Unity peut lancer la partie'});
 
-    // Les obstacles sont déjà assignés automatiquement, on lance juste la partie
     io.to(player.roomId).emit("game:started");
     console.log(`🎮 Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
     ack?.({ ok: true });
@@ -285,7 +276,6 @@ io.on('connection', (socket) => {
       const remainingPlayers = getPlayers(roomId);
       io.to(roomId).emit('room:players', remainingPlayers);
 
-      // Réassigner automatiquement les obstacles quand un joueur quitte
       if (remainingPlayers.length > 0) {
         reassignObstaclesAutomatically(roomId);
       }
