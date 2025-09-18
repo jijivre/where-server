@@ -23,15 +23,16 @@ const connectedGuides = new Map<string, string>();
 
 const genPIN = () => crypto.randomBytes(3).toString("hex").toUpperCase();
 
-enum ObstacleType {
-  Walls = "walls",
-  Box = "box",
-  Box2 = "box2",
-  Ladder = "ladder",
-  Vase = "vase",
-  Box3 = "box3",
-  Chest = "chest",
-}
+// Commenté : plus besoin de la logique des obstacles séparés
+// enum ObstacleType {
+//   Walls = "walls",
+//   Box = "box",
+//   Box2 = "box2",
+//   Ladder = "ladder",
+//   Vase = "vase",
+//   Box3 = "box3",
+//   Chest = "chest",
+// }
 
 enum Role {
   Unity = "unity",
@@ -43,7 +44,7 @@ type Player = {
   pseudo: string;
   role: Role;
   roomId: string;
-  obstacleType?: ObstacleType;
+  // obstacleType?: ObstacleType; // Commenté : plus nécessaire
   position?: { x: number; y: number };
   lastPositionUpdate?: number;
 };
@@ -57,32 +58,33 @@ function getPlayers(roomId: string) {
   return Array.from(players.values()).filter((p) => p.roomId === roomId);
 }
 
-function assignRandomObstaclePerPlayer(roomId: string) {
-  const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
+// Commenté : plus besoin d'assigner des obstacles spécifiques
+// function assignRandomObstaclePerPlayer(roomId: string) {
+//   const guides = getPlayers(roomId).filter(p => p.role === Role.Guide);
 
-  const priority: ObstacleType[] = [
-    ObstacleType.Walls,
-    ObstacleType.Box,
-    ObstacleType.Box2,
-    ObstacleType.Ladder,
-    ObstacleType.Vase,
-    ObstacleType.Box3,
-    ObstacleType.Chest,
-  ];
+//   const priority: ObstacleType[] = [
+//     ObstacleType.Walls,
+//     ObstacleType.Box,
+//     ObstacleType.Box2,
+//     ObstacleType.Ladder,
+//     ObstacleType.Vase,
+//     ObstacleType.Box3,
+//     ObstacleType.Chest,
+//   ];
 
-  const available = priority.slice(0, guides.length);
+//   const available = priority.slice(0, guides.length);
 
-  for (let i = available.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [available[i], available[j]] = [available[j], available[i]];
-  }
+//   for (let i = available.length - 1; i > 0; i--) {
+//     const j = Math.floor(Math.random() * (i + 1));
+//     [available[i], available[j]] = [available[j], available[i]];
+//   }
 
-  guides.forEach((g, idx) => {
-    const assignedType = available[idx] ?? null;
-    players.set(g.socketId, { ...g, obstacleType: assignedType });
-    io.to(g.socketId).emit("obstacle:assigned", { obstacleType: assignedType });
-  });
-}
+//   guides.forEach((g, idx) => {
+//     const assignedType = available[idx] ?? null;
+//     players.set(g.socketId, { ...g, obstacleType: assignedType });
+//     io.to(g.socketId).emit("obstacle:assigned", { obstacleType: assignedType });
+//   });
+// }
 
 // Route pour gérer la victoire depuis Unity
 app.post('/victory', (req, res) => {
@@ -237,7 +239,8 @@ io.on('connection', (socket) => {
 
     if (player.role == Role.Guide) return ack?.({ ok: false, error: 'Seul le joueur Unity peut lancer la partie'});
 
-    assignRandomObstaclePerPlayer(player.roomId);
+    // Commenté : plus besoin d'assigner des obstacles
+    // assignRandomObstaclePerPlayer(player.roomId);
 
     io.to(player.roomId).emit("game:started");
     console.log(`🎮 Partie lancée dans la room ${player.roomId} par ${player.pseudo}`);
